@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionnaire de CV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Styles pour le modèle de CV */
+        .cv-progress-bar { background-color: #4a5568; }
+        .cv-progress { background-color: #f6e05e; height: 8px; }
+        .cv-section-title {
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        /* Masquer les vues par défaut */
+        .view { display: none; }
+        
+        /* Styles pour les modales */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        /* Styles spéciaux pour l'export PDF */
+        .pdf-layout {
+            width: 794px !important;
+            min-height: 1123px !important;
+            font-family: 'Inter', Arial, sans-serif !important;
+            font-size: 14px !important;
+            line-height: 1.4 !important;
+            background: white !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        .pdf-layout .pdf-flex {
+            display: flex !important;
+            flex-direction: row !important;
+            height: 100% !important;
+        }
+
+        .pdf-layout .pdf-sidebar {
+            width: 260px !important;
+            flex-shrink: 0 !important;
+            background-color: #2d3748 !important;
+            color: white !important;
+            padding: 30px 25px !important;
+        }
+
+        .pdf-layout .pdf-main {
+            width: 534px !important;
+            flex-shrink: 0 !important;
+            padding: 30px 25px !important;
+            background: white !important;
+        }
+
+        .pdf-layout h1 {
+            font-size: 28px !important;
+            font-weight: bold !important;
+            margin-bottom: 8px !important;
+            color: #2d3748 !important;
+        }
+
+        .pdf-layout h2 {
+            font-size: 18px !important;
+            font-weight: bold !important;
+            margin-bottom: 16px !important;
+            padding-bottom: 8px !important;
+            border-bottom: 2px solid #f6e05e !important;
+        }
+
+        .pdf-layout h3 {
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            margin-bottom: 4px !important;
+        }
+
+        .pdf-layout .pdf-main h2 {
+            color: #2d3748 !important;
+            border-bottom-color: #e2e8f0 !important;
+        }
+
+        .pdf-layout .pdf-photo {
+            width: 120px !important;
+            height: 120px !important;
+            border-radius: 50% !important;
+            object-fit: cover !important;
+            border: 3px solid #718096 !important;
+            margin: 0 auto 25px auto !important;
+            display: block !important;
+        }
+
+        .pdf-layout .pdf-progress-container {
+            background-color: #4a5568 !important;
+            height: 8px !important;
+            border-radius: 4px !important;
+            margin-top: 4px !important;
+            margin-bottom: 16px !important;
+        }
+
+        .pdf-layout .pdf-progress-bar {
+            background-color: #f6e05e !important;
+            height: 100% !important;
+            border-radius: 4px !important;
+        }
+
+        .pdf-layout ul {
+            padding-left: 20px !important;
+            margin-bottom: 16px !important;
+        }
+
+        .pdf-layout li {
+            margin-bottom: 4px !important;
+        }
+
+        .pdf-layout p {
+            margin-bottom: 8px !important;
+        }
+
+        .pdf-layout .pdf-period {
+            float: right !important;
+            color: #718096 !important;
+            font-size: 12px !important;
+        }
+
+        .pdf-layout .pdf-experience-item,
+        .pdf-layout .pdf-formation-item {
+            margin-bottom: 20px !important;
+            clear: both !important;
+        }
+
+        /* Cache les éléments d'interface pendant l'export */
+        .hide-on-export {
+            display: none !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+
+        <!-- ===== Vue Menu Principal ===== -->
+        <div id="menu-view" class="view">
+            <div class="text-center bg-white p-10 rounded-lg shadow-lg">
+                <h1 class="text-4xl font-bold mb-8">Gestionnaire de CV</h1>
+                <div class="space-y-4 md:space-y-0 md:space-x-4">
+                    <button onclick="showView('cv-list-view')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        Mes CVs
+                    </button>
+                    <button onclick="handleCreateNewCv()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        Créer un nouveau CV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Vue Liste des CVs ===== -->
+        <div id="cv-list-view" class="view">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold">Mes CVs</h1>
+                <button onclick="showView('menu-view')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">Retour au menu</button>
+            </div>
+            <div id="cv-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Les CVs seront injectés ici -->
+            </div>
+             <div class="mt-8 text-center">
+                <button onclick="handleCreateNewCv()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                    + Créer un nouveau CV
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== Vue Formulaire de Création/Édition de CV ===== -->
+        <div id="cv-form-view" class="view">
+             <form id="cv-form" class="bg-white p-8 rounded-lg shadow-lg space-y-8">
+                <div class="flex justify-between items-center">
+                    <h1 id="form-title" class="text-3xl font-bold">Créer un CV</h1>
+                    <div>
+                        <button type="button" onclick="showView('cv-list-view')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg mr-2">Annuler</button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Sauvegarder</button>
+                    </div>
+                </div>
+                
+                <!-- Sections du formulaire -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4 p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold">Informations Générales</h2>
+                        <div><label class="block">Nom Complet:</label><input required name="nom" class="w-full border p-2 rounded"></div>
+                        <div><label class="block">Titre du CV (ex: Développeur Web):</label><input required name="titre" class="w-full border p-2 rounded"></div>
+                        <div>
+                            <label class="block">Photo de profil:</label>
+                            <input type="file" name="photoFile" accept="image/*" class="w-full border p-2 rounded file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            <img id="form-image-preview" src="" class="mt-4 rounded-full w-24 h-24 object-cover hidden">
+                            <input type="hidden" name="photoUrl">
+                        </div>
+                    </div>
+                    <div class="space-y-4 p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold">Coordonnées</h2>
+                        <div><label class="block">Adresse:</label><input required name="adresse" class="w-full border p-2 rounded"></div>
+                        <div><label class="block">Téléphone:</label><input required name="telephone" class="w-full border p-2 rounded"></div>
+                        <div><label class="block">Email:</label><input required type="email" name="email" class="w-full border p-2 rounded"></div>
+                        <div><label class="block">LinkedIn (sans https://):</label><input name="linkedin" class="w-full border p-2 rounded"></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h2 class="text-xl font-semibold">Résumé / Profil</h2>
+                    <textarea name="resume" rows="5" class="w-full border p-2 rounded"></textarea>
+                </div>
+
+                <!-- Sections dynamiques -->
+                <div id="dynamic-sections-container" class="space-y-6">
+                    <!-- Expériences -->
+                    <div class="p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold mb-2">Expériences Professionnelles</h2>
+                        <div id="experiences-container"></div>
+                        <button type="button" onclick="addDynamicField('experiences')" class="mt-2 bg-gray-200 hover:bg-gray-300 text-black font-bold py-1 px-3 rounded text-sm">+ Ajouter une expérience</button>
+                    </div>
+                    <!-- Formations -->
+                    <div class="p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold mb-2">Formation & Certifications</h2>
+                        <div id="formation-container"></div>
+                        <button type="button" onclick="addDynamicField('formation')" class="mt-2 bg-gray-200 hover:bg-gray-300 text-black font-bold py-1 px-3 rounded text-sm">+ Ajouter une formation</button>
+                    </div>
+                    <!-- Compétences -->
+                    <div class="p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold mb-2">Compétences (une par ligne)</h2>
+                        <textarea name="competences" rows="5" class="w-full border p-2 rounded"></textarea>
+                    </div>
+                    <!-- Langues -->
+                    <div class="p-4 border rounded-lg">
+                         <h2 class="text-xl font-semibold mb-2">Langues</h2>
+                        <div id="langues-container"></div>
+                        <button type="button" onclick="addDynamicField('langues')" class="mt-2 bg-gray-200 hover:bg-gray-300 text-black font-bold py-1 px-3 rounded text-sm">+ Ajouter une langue</button>
+                    </div>
+                    <!-- Informatique -->
+                     <div class="p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold mb-2">Outils Informatique (une par ligne)</h2>
+                        <textarea name="informatique" rows="3" class="w-full border p-2 rounded"></textarea>
+                    </div>
+                    <!-- Centres d'intérêt -->
+                     <div class="p-4 border rounded-lg">
+                        <h2 class="text-xl font-semibold mb-2">Centres d'intérêt (séparés par une virgule)</h2>
+                        <input name="centresInteret" class="w-full border p-2 rounded">
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- ===== Vue Prévisualisation du CV ===== -->
+        <div id="cv-preview-view" class="view">
+             <div class="flex justify-between items-center mb-6 bg-white p-4 rounded-lg shadow-md sticky top-0 z-10">
+                <h1 id="preview-title" class="text-2xl font-bold">Aperçu du CV</h1>
+                <div>
+                     <button id="export-pdf-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Exporter en PDF</button>
+                    <button onclick="showView('cv-list-view')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">Retour à la liste</button>
+                </div>
+            </div>
+            <div id="cv-render-target" class="max-w-4xl mx-auto bg-white shadow-2xl rounded-lg overflow-hidden">
+                 <div class="md:flex">
+                    <div class="md:w-1/3 bg-gray-800 text-white p-8" id="sidebar-content"></div>
+                    <div class="md:w-2/3 p-8" id="main-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Element caché pour l'export PDF ===== -->
+        <div id="pdf-export-element" style="position: absolute; left: -9999px; top: -9999px;">
+            <!-- Le contenu du CV sera copié ici pour l'export -->
+        </div>
+        
+        <!-- ===== Modales ===== -->
+        <div id="replace-cv-modal" class="modal-backdrop" style="display: none;">
+            <div class="modal-content">
+                <h2 class="text-xl font-bold mb-4">Limite de 3 CV atteinte</h2>
+                <p class="mb-6">Veuillez choisir un CV à remplacer pour en créer un nouveau.</p>
+                <div id="replace-options" class="space-y-2"></div>
+                <button onclick="closeModal('replace-cv-modal')" class="mt-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg w-full">Annuler</button>
+            </div>
+        </div>
+        
+        <div id="delete-confirm-modal" class="modal-backdrop" style="display: none;">
+            <div class="modal-content">
+                <h2 class="text-xl font-bold mb-4">Confirmer la suppression</h2>
+                <p id="delete-confirm-text" class="mb-6"></p>
+                <div class="flex justify-end gap-4">
+                     <button onclick="closeModal('delete-confirm-modal')" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg">Annuler</button>
+                     <button id="delete-confirm-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Supprimer</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    // ===================================================================================
+    // Application Logic
+    // ===================================================================================
+    
+    let cvs = [];
+    let currentEditingIndex = null;
+    const MAX_CV = 3;
+
+    // --- Initialisation ---
+    document.addEventListener('DOMContentLoaded', () => {
+        loadCVs();
+        showView('menu-view');
+        document.getElementById('cv-form').addEventListener('submit', handleFormSubmit);
+        // Listener for image preview
+        document.querySelector('input[name="photoFile"]').addEventListener('change', (event) => {
+            const preview = document.getElementById('form-image-preview');
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+    });
+
+    // --- Gestion des Vues ---
+    function showView(viewId) {
+        document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+        const view = document.getElementById(viewId);
+        if (view) {
+            view.style.display = 'block';
+            if (viewId === 'cv-list-view') {
+                renderCvList();
+            }
+        } else {
+            console.error(`View with id "${viewId}" not found.`);
+            document.getElementById('menu-view').style.display = 'block';
+        }
+    }
+    
+    // --- Gestion des Modales ---
+    function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+    // --- Stockage Local ---
+    function loadCVs() {
+        const storedCvs = localStorage.getItem('cvs-data');
+        if (storedCvs && JSON.parse(storedCvs).length > 0) {
+            cvs = JSON.parse(storedCvs);
+        } else {
+            // CV d'exemple
+            cvs = [{
+                nom: "Mariama Dalan Bah",
+                titre: "Professionnelle dynamique",
+                photoUrl: "https://placehold.co/150x150/e2e8f0/2d3748?text=MDB",
+                resume: "Professionnelle dynamique, passionnée par le développement personnel, je m'efforce d'apporter des solutions créatives et innovantes aux défis rencontrés dans le milieu professionnel. Ma capacité à m'adapter rapidement à de nouveaux environnements et mes compétences interpersonnelles font de moi une candidate idéale pour des postes nécessitant initiative et collaboration.",
+                informationsPersonnelles: {
+                    adresse: "Ansoumanya, Commune de Dubréka",
+                    telephone: "+224 610 49 45 14",
+                    email: "bahmdalan@gmail.com",
+                    linkedin: ""
+                },
+                competences: [
+                    "Pack Office",
+                    "Motivation et dynamisme",
+                    "Sens de l'accueil et de l'écoute",
+                    "Esprit d'équipe"
+                ],
+                langues: [
+                    { nom: "Français", niveau: "Langue maternelle", pourcentage: 100 },
+                    { nom: "Anglais", niveau: "Notions intermédiaires", pourcentage: 50 }
+                ],
+                experiences: [],
+                formation: [
+                    {
+                        diplome: "BTS en Banque-Assurance",
+                        etablissement: "Université Nongo Conakry (UNC), Conakry, Guinée",
+                        periode: "2022 - 2024",
+                        taches: ["Gestion de la relation client dans le secteur bancaire et assurantiel", "Analyse financière des produits bancaires et d'assurance"]
+                    },
+                    {
+                        diplome: "Lycée: Option Sciences mathématiques",
+                        etablissement: "Complexe Scolaire Saint Georges de Taouyah, Conakry, Guinée",
+                        periode: "2019 - 2022",
+                        taches: []
+                    },
+                    {
+                        diplome: "Langue Anglaise et Informatique Bureautique",
+                        etablissement: "CELPS-TECHNOLOGY, Conakry",
+                        periode: "2022 - 2023",
+                        taches: [
+                            "Notions intermédiaires sur la langue anglaise",
+                            "Application des outils bureautiques pour la gestion de projets et la présentation d'informations commerciales.",
+                            "Utilisation de logiciels de traitement de texte et tableurs pour l'automatisation des rapports financiers et des analyses de données."
+                        ]
+                    },
+                    {
+                        diplome: "Formation en développement personnel à l'UNC",
+                        etablissement: "Séminaires sur la communication, l'estime de soi et la gestion du temps.",
+                        periode: "Déc. 2024",
+                        taches: []
+                    },
+                     {
+                        diplome: "Formation en leadership à l'UGLC de Sonfonia",
+                        etablissement: "Développement des compétences en communication, gestion des conflits et motivation d'équipe.",
+                        periode: "Nov. 2024",
+                        taches: []
+                    },
+                    {
+                        diplome: "BEPC",
+                        etablissement: "Groupe Scolaire Emmaus Bambino de Mamou",
+                        periode: "2015 - 2019",
+                        taches: []
+                    },
+                    {
+                        diplome: "Certificat d'Etudes Primaires",
+                        etablissement: "Groupe Scolaire Emmaus Bambino de Mamou",
+                        periode: "2009 - 2015",
+                        taches: []
+                    }
+                ],
+                informatique: [],
+                centresInteret: ["Lecture", "Sport", "Engagement associatif"]
+            }];
+            saveCVs();
+        }
+    }
+
+    function saveCVs() {
+        localStorage.setItem('cvs-data', JSON.stringify(cvs));
+    }
+
+    // --- Rendu de la liste des CVs ---
+    function renderCvList() {
+        const container = document.getElementById('cv-list-container');
+        container.innerHTML = '';
+        if (cvs.length === 0) {
+            container.innerHTML = `<p class="text-gray-500 col-span-full text-center">Aucun CV trouvé. Rechargez la page pour voir l'exemple.</p>`;
+            return;
+        }
+        cvs.forEach((cv, index) => {
+            const cvCard = `
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold">${cv.nom || 'CV sans nom'}</h3>
+                        <p class="text-gray-600">${cv.titre || 'Sans titre'}</p>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        <button onclick="handleEditCv(${index})" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded text-sm">Modifier</button>
+                        <button onclick="handlePreviewCv(${index})" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded text-sm">Aperçu</button>
+                        <button onclick="handleDeleteCv(${index})" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm">Supprimer</button>
+                    </div>
+                </div>
+            `;
+            container.innerHTML += cvCard;
+        });
+    }
+    
+    // --- Gestion des Actions sur les CVs ---
+    function handleCreateNewCv() {
+        if (cvs.length >= MAX_CV) {
+            const optionsContainer = document.getElementById('replace-options');
+            optionsContainer.innerHTML = '';
+            cvs.forEach((cv, index) => {
+                const button = document.createElement('button');
+                button.className = 'w-full text-left bg-blue-100 hover:bg-blue-200 p-3 rounded-lg';
+                button.textContent = `Remplacer: ${cv.nom}`;
+                button.onclick = () => {
+                    closeModal('replace-cv-modal');
+                    handleEditCv(index);
+                };
+                optionsContainer.appendChild(button);
+            });
+            showModal('replace-cv-modal');
+        } else {
+            currentEditingIndex = null;
+            renderCvForm();
+            showView('cv-form-view');
+        }
+    }
+
+    function handleEditCv(index) {
+        currentEditingIndex = index;
+        const cvData = cvs[index];
+        renderCvForm(cvData);
+        showView('cv-form-view');
+    }
+    
+    function handlePreviewCv(index) {
+        const cvData = cvs[index];
+        document.getElementById('preview-title').textContent = `Aperçu: ${cvData.nom}`;
+        document.getElementById('export-pdf-btn').onclick = () => exportToPdf(cvData);
+        populateCV(cvData);
+        showView('cv-preview-view');
+    }
+
+    function handleDeleteCv(index) {
+        const modal = document.getElementById('delete-confirm-modal');
+        document.getElementById('delete-confirm-text').textContent = `Êtes-vous sûr de vouloir supprimer le CV de ${cvs[index].nom} ?`;
+        document.getElementById('delete-confirm-btn').onclick = () => {
+            cvs.splice(index, 1);
+            saveCVs();
+            renderCvList();
+            closeModal('delete-confirm-modal');
+        };
+        showModal('delete-confirm-modal');
+    }
+    
+    // --- Export PDF amélioré ---
+    async function exportToPdf(cvData) {
+        const { jsPDF } = window.jspdf;
+        
+        // Créer l'élément pour l'export
+        const exportElement = document.getElementById('pdf-export-element');
+        exportElement.innerHTML = createPdfLayout(cvData);
+        
+        // Attendre que les images soient chargées
+        const images = exportElement.querySelectorAll('img');
+        await Promise.all([...images].map(img => {
+            return new Promise(resolve => {
+                if (img.complete) resolve();
+                else {
+                    img.onload = resolve;
+                    img.onerror = resolve;
+                }
+            });
+        }));
+
+        // Configurer html2canvas pour une meilleure qualité
+        const canvas = await html2canvas(exportElement, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            width: 794,
+            height: 1123,
+            logging: false
+        });
+
+        // Créer le PDF
+        const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'px',
+            format: [794, 1123]
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 794, 1123);
+        
+        // Sauvegarder
+        pdf.save(`CV_${cvData.nom.replace(/ /g, '_')}.pdf`);
+    }
+
+    function createPdfLayout(cvData) {
+        const info = cvData.informationsPersonnelles || {};
+        
+        return `
+            <div class="pdf-layout">
+                <div class="pdf-flex">
+                    <div class="pdf-sidebar">
+                        <img src="${cvData.photoUrl}" alt="Photo" class="pdf-photo" onerror="this.style.display='none';">
+                        
+                        <h2>Informations</h2>
+                        <p><strong>Email:</strong><br>${info.email}</p>
+                        <p><strong>Téléphone:</strong><br>${info.telephone}</p>
+                        <p><strong>Adresse:</strong><br>${info.adresse}</p>
+                        ${info.linkedin ? `<p><strong>LinkedIn:</strong><br>${info.linkedin}</p>` : ''}
+                        
+                        <h2 style="margin-top: 25px;">Compétences</h2>
+                        <ul>
+                            ${(cvData.competences || []).map(c => `<li>${c}</li>`).join('')}
+                        </ul>
+                        
+                        <h2 style="margin-top: 25px;">Langues</h2>
+                        ${(cvData.langues || []).map(l => `
+                            <div style="margin-bottom: 16px;">
+                                <p>${l.nom} - ${l.niveau}</p>
+                                <div class="pdf-progress-container">
+                                    <div class="pdf-progress-bar" style="width: ${l.pourcentage}%;"></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                        
+                        <h2 style="margin-top: 25px;">Centres d'intérêt</h2>
+                        <ul>
+                            ${(cvData.centresInteret || []).map(ci => `<li>${ci}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="pdf-main">
+                        <h1>${cvData.nom}</h1>
+                        <p style="font-size: 18px; color: #718096; margin-bottom: 20px;">${cvData.titre}</p>
+                        
+                        <h2>Profil</h2>
+                        <p style="font-style: italic; margin-bottom: 25px;">${cvData.resume}</p>
+                        
+                        ${(cvData.experiences && cvData.experiences.length > 0) ? `
+                        <h2>Expérience Professionnelle</h2>
+                        ${cvData.experiences.map(e => `
+                            <div class="pdf-experience-item">
+                                <div class="pdf-period">${e.periode}</div>
+                                <h3>${e.poste}</h3>
+                                <p style="font-style: italic; color: #718096;">${e.entreprise}</p>
+                                <ul>
+                                    ${(e.taches || []).map(t => `<li>${t}</li>`).join('')}
+                                </ul>
+                            </div>
+                        `).join('')}` : ''}
+                        
+                        <h2>Formation et Certifications</h2>
+                        ${(cvData.formation || []).map(f => `
+                            <div class="pdf-formation-item">
+                                <div class="pdf-period">${f.periode}</div>
+                                <h3>${f.diplome}</h3>
+                                <p style="font-style: italic; color: #718096;">${f.etablissement}</p>
+                                ${(f.taches && f.taches.length > 0) ? `
+                                <ul>
+                                    ${f.taches.map(t => `<li>${t}</li>`).join('')}
+                                </ul>` : ''}
+                            </div>
+                        `).join('')}
+                        
+                        ${(cvData.informatique && cvData.informatique.length > 0) ? `
+                        <h2>Informatique</h2>
+                        <ul>
+                            ${cvData.informatique.map(i => `<li>${i}</li>`).join('')}
+                        </ul>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- Helper pour lire un fichier en Base64 ---
+    function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // --- Gestion du Formulaire ---
+    async function handleFormSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formData = new FormData(form);
+        const photoFile = form.photoFile.files[0];
+        let photoUrl = form.photoUrl.value;
+
+        if (photoFile) {
+            photoUrl = await readFileAsBase64(photoFile);
+        }
+
+        const cvData = {
+            nom: formData.get('nom'),
+            titre: formData.get('titre'),
+            photoUrl: photoUrl || 'https://placehold.co/150x150/e2e8f0/2d3748?text=Photo',
+            resume: formData.get('resume'),
+            informationsPersonnelles: {
+                adresse: formData.get('adresse'),
+                telephone: formData.get('telephone'),
+                email: formData.get('email'),
+                linkedin: formData.get('linkedin'),
+            },
+            competences: formData.get('competences').split('\n').filter(c => c.trim() !== ''),
+            langues: [],
+            experiences: [],
+            formation: [],
+            informatique: formData.get('informatique').split('\n').filter(i => i.trim() !== ''),
+            centresInteret: formData.get('centresInteret').split(',').map(ci => ci.trim()).filter(ci => ci !== ''),
+        };
+
+        document.querySelectorAll('#experiences-container .dynamic-field').forEach(el => {
+            cvData.experiences.push({
+                poste: el.querySelector('[name="exp_poste"]').value,
+                entreprise: el.querySelector('[name="exp_entreprise"]').value,
+                periode: el.querySelector('[name="exp_periode"]').value,
+                taches: el.querySelector('[name="exp_taches"]').value.split('\n').filter(t => t.trim() !== ''),
+            });
+        });
+        document.querySelectorAll('#formation-container .dynamic-field').forEach(el => {
+            cvData.formation.push({
+                diplome: el.querySelector('[name="form_diplome"]').value,
+                etablissement: el.querySelector('[name="form_etablissement"]').value,
+                periode: el.querySelector('[name="form_periode"]').value,
+                taches: el.querySelector('[name="form_taches"]').value.split('\n').filter(t => t.trim() !== ''),
+            });
+        });
+        document.querySelectorAll('#langues-container .dynamic-field').forEach(el => {
+            cvData.langues.push({
+                nom: el.querySelector('[name="lang_nom"]').value,
+                niveau: el.querySelector('[name="lang_niveau"]').value,
+                pourcentage: parseInt(el.querySelector('[name="lang_pourcentage"]').value, 10),
+            });
+        });
+        
+        if (currentEditingIndex !== null) {
+            cvs[currentEditingIndex] = cvData;
+        } else {
+            cvs.push(cvData);
+        }
+        
+        saveCVs();
+        showView('cv-list-view');
+        currentEditingIndex = null;
+    }
+
+    function renderCvForm(cvData = {}) {
+        const form = document.getElementById('cv-form');
+        form.reset();
+        
+        document.getElementById('experiences-container').innerHTML = '';
+        document.getElementById('formation-container').innerHTML = '';
+        document.getElementById('langues-container').innerHTML = '';
+
+        const preview = document.getElementById('form-image-preview');
+        preview.classList.add('hidden');
+        preview.src = '';
+        
+        document.getElementById('form-title').textContent = cvData.nom ? `Modifier le CV de ${cvData.nom}` : 'Créer un nouveau CV';
+
+        form.nom.value = cvData.nom || '';
+        form.titre.value = cvData.titre || '';
+        form.photoUrl.value = cvData.photoUrl || '';
+        if (cvData.photoUrl) {
+            preview.src = cvData.photoUrl;
+            preview.classList.remove('hidden');
+        }
+
+        form.resume.value = cvData.resume || '';
+        
+        const info = cvData.informationsPersonnelles || {};
+        form.adresse.value = info.adresse || '';
+        form.telephone.value = info.telephone || '';
+        form.email.value = info.email || '';
+        form.linkedin.value = info.linkedin || '';
+        
+        form.competences.value = (cvData.competences || []).join('\n');
+        form.informatique.value = (cvData.informatique || []).join('\n');
+        form.centresInteret.value = (cvData.centresInteret || []).join(', ');
+        
+        (cvData.experiences || []).forEach(item => addDynamicField('experiences', item));
+        (cvData.formation || []).forEach(item => addDynamicField('formation', item));
+        (cvData.langues || []).forEach(item => addDynamicField('langues', item));
+    }
+
+    function addDynamicField(type, data = {}) {
+        const container = document.getElementById(`${type}-container`);
+        const div = document.createElement('div');
+        div.className = 'dynamic-field border p-3 mt-2 rounded-md relative';
+        
+        let content = '';
+        if (type === 'experiences') {
+            content = `
+                <input required placeholder="Poste" name="exp_poste" class="w-full border p-1 rounded mb-1" value="${data.poste || ''}">
+                <input required placeholder="Entreprise, Ville" name="exp_entreprise" class="w-full border p-1 rounded mb-1" value="${data.entreprise || ''}">
+                <input required placeholder="Période (ex: 2020 - Présent)" name="exp_periode" class="w-full border p-1 rounded mb-1" value="${data.periode || ''}">
+                <textarea placeholder="Tâches (une par ligne)" name="exp_taches" rows="3" class="w-full border p-1 rounded">${(data.taches || []).join('\n')}</textarea>
+            `;
+        } else if (type === 'formation') {
+            content = `
+                <input required placeholder="Diplôme / Titre de la formation" name="form_diplome" class="w-full border p-1 rounded mb-1" value="${data.diplome || ''}">
+                <input required placeholder="Établissement, Ville" name="form_etablissement" class="w-full border p-1 rounded mb-1" value="${data.etablissement || ''}">
+                <input required placeholder="Période" name="form_periode" class="w-full border p-1 rounded mb-1" value="${data.periode || ''}">
+                <textarea placeholder="Détails / Tâches (une par ligne)" name="form_taches" rows="3" class="w-full border p-1 rounded">${(data.taches || []).join('\n')}</textarea>
+            `;
+        } else if (type === 'langues') {
+             content = `
+                <input required placeholder="Langue (ex: Anglais)" name="lang_nom" class="w-full border p-1 rounded mb-1" value="${data.nom || ''}">
+                <input required placeholder="Niveau (ex: Intermédiaire B1)" name="lang_niveau" class="w-full border p-1 rounded mb-1" value="${data.niveau || ''}">
+                <label class="text-sm">Pourcentage (0-100)</label>
+                <input required type="number" min="0" max="100" placeholder="66" name="lang_pourcentage" class="w-full border p-1 rounded" value="${data.pourcentage || '50'}">
+            `;
+        }
+        
+        div.innerHTML = content + `<button type="button" onclick="this.parentElement.remove()" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center font-bold">×</button>`;
+        container.appendChild(div);
+    }
+
+    // --- Rendu du CV ---
+    function populateCV(cvData) {
+        const sidebarContent = document.getElementById('sidebar-content');
+        const mainContent = document.getElementById('main-content');
+
+        const info = cvData.informationsPersonnelles || {};
+        sidebarContent.innerHTML = `
+            <div class="flex justify-center mb-8">
+                <img src="${cvData.photoUrl}" alt="Photo de profil de ${cvData.nom}" class="rounded-full w-36 h-36 border-4 border-gray-400 object-cover" onerror="this.onerror=null;this.src='https://placehold.co/150x150/e2e8f0/2d3748?text=Photo';">
+            </div>
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold border-b-2 border-yellow-300 pb-2 mb-4">Informations</h2>
+                <p class="mb-2"><strong>Email:</strong><br><a href="mailto:${info.email}" class="hover:text-yellow-300 break-all">${info.email}</a></p>
+                <p class="mb-2"><strong>Téléphone:</strong><br>${info.telephone}</p>
+                <p class="mb-2"><strong>Adresse:</strong><br>${info.adresse}</p>
+                ${info.linkedin ? `<p><strong>LinkedIn:</strong><br><a href="#" class="hover:text-yellow-300 break-all">${info.linkedin}</a></p>` : ''}
+            </div>
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold border-b-2 border-yellow-300 pb-2 mb-4">Compétences</h2>
+                <ul class="list-disc list-inside">${(cvData.competences || []).map(c => `<li>${c}</li>`).join('')}</ul>
+            </div>
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold border-b-2 border-yellow-300 pb-2 mb-4">Langues</h2>
+                ${(cvData.langues || []).map(l => `
+                    <div class="mb-4">
+                        <p>${l.nom} - ${l.niveau}</p>
+                        <div class="w-full cv-progress-bar rounded-full mt-1">
+                            <div class="cv-progress rounded-full" style="width: ${l.pourcentage}%;"></div>
+                        </div>
+                    </div>`).join('')}
+            </div>
+            <div>
+                 <h2 class="text-2xl font-bold border-b-2 border-yellow-300 pb-2 mb-4">Centres d'intérêt</h2>
+                 <ul class="list-disc list-inside">${(cvData.centresInteret || []).map(ci => `<li>${ci}</li>`).join('')}</ul>
+            </div>`;
+
+        mainContent.innerHTML = `
+            <div class="mb-8">
+                <h1 class="text-4xl font-bold text-gray-800">${cvData.nom}</h1>
+                <p class="text-xl text-gray-600">${cvData.titre}</p>
+            </div>
+            <div class="mb-8">
+                <h2 class="cv-section-title">Profil</h2>
+                <p class="text-gray-700 italic">${cvData.resume}</p>
+            </div>
+            ${(cvData.experiences && cvData.experiences.length > 0) ? `
+            <div class="mb-8">
+                <h2 class="cv-section-title">Expérience Professionnelle</h2>
+                ${cvData.experiences.map(e => `
+                    <div class="mb-6">
+                        <p class="float-right text-gray-500 text-sm">${e.periode}</p>
+                        <h3 class="text-lg font-semibold">${e.poste}</h3>
+                        <p class="text-md italic text-gray-600">${e.entreprise}</p>
+                        <ul class="list-disc list-inside mt-2 text-gray-700">${(e.taches || []).map(t => `<li>${t}</li>`).join('')}</ul>
+                    </div>`).join('')}
+            </div>` : ''}
+            <div class="mb-8">
+                <h2 class="cv-section-title">Formation et Certifications</h2>
+                ${(cvData.formation || []).map(f => `
+                    <div class="mb-4">
+                        <p class="float-right text-gray-500 text-sm">${f.periode}</p>
+                        <h3 class="text-lg font-semibold">${f.diplome}</h3>
+                        <p class="text-md italic text-gray-600">${f.etablissement}</p>
+                        <ul class="list-disc list-inside mt-2 text-gray-700 text-sm">${(f.taches || []).map(t => `<li>${t}</li>`).join('')}</ul>
+                    </div>`).join('')}
+            </div>
+            ${(cvData.informatique && cvData.informatique.length > 0) ? `
+            <div class="mb-8">
+                <h2 class="cv-section-title">Informatique</h2>
+                <ul class="list-disc list-inside text-gray-700">${cvData.informatique.map(i => `<li>${i}</li>`).join('')}</ul>
+            </div>` : ''}
+            `;
+    }
+    </script>
+</body>
+</html>
